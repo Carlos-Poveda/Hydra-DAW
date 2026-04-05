@@ -42,6 +42,13 @@ public class Sintetizador {
     private static final int CONTROL_RATE_SAMPLES = 64;
 
     private Runnable updateCallback;
+    // Envolvente de Filtro ---
+    private ADSR filterAdsr = new ADSR();
+    private double filterEnvelopeAmount = 0.0; // En Hz (Ej: de -10000 a +10000)
+
+    public ADSR getFilterAdsr() { return filterAdsr; }
+    public void setFilterEnvelopeAmount(double amount) { this.filterEnvelopeAmount = amount; }
+    public double getFilterEnvelopeAmount() { return filterEnvelopeAmount; }
 
     // --- Hilo de Audio ---
     private final Audio hiloAudio = new Audio(() -> {
@@ -97,39 +104,72 @@ public class Sintetizador {
     }
 
     public double nextSample() {
+        // 1. Calculamos las envolventes muestra a muestra (es muy barato para la CPU)
+        double ampEnv = adsr.getNextEnvelope();
+        double filterEnv = filterAdsr.getNextEnvelope();
+
+        // 2. Control Rate: Actualizamos Filtro y LFO cada X muestras (Optimización)
         if (controlCounter++ >= CONTROL_RATE_SAMPLES) {
             controlCounter = 0;
+
+            double lfoModValue = 0.0;
+
+            // Procesar LFO
             if (lfoActivado && lfo.getTarget() != LFO.Target.NONE) {
-                // Pasamos las 64 muestras al LFO
-                aplicarModulacionLFO(CONTROL_RATE_SAMPLES);
+                lfoModValue = lfo.getModulationValue(CONTROL_RATE_SAMPLES);
+
+                switch (lfo.getTarget()) {
+                    case FILTER_RESONANCE:
+                        double modRes = baseFilterResonance + (lfoModValue * LFO_RESONANCE_RANGE);
+                        filtro.setResonancia(Math.max(0.1, Math.min(1.0, modRes)));
+                        break;
+                    case OSC_VOLUME:
+                        double volMod = lfoModValue * LFO_VOLUME_RANGE;
+                        lfoVolumeGain = Math.max(0.0, Math.min(1.0, 1.0 - Math.abs(volMod)));
+                        break;
+                    case PITCH:
+                        double pitchMod = lfoModValue * LFO_PITCH_RANGE;
+                        double pitchMultiplier = Math.pow(2.0, pitchMod / 12.0);
+                        for (Oscilator osc : oscillators) {
+                            osc.setKeyFrequency(currentBaseFrequency * pitchMultiplier);
+                        }
+                        break;
+                    default: break; // Cutoff se procesa abajo
+                }
             } else {
                 lfoVolumeGain = 1.0;
             }
-        }
-
-        double totalSample = 0;
-        int activeOscs = 0;
-        for (Oscilator osc : oscillators) {
-            if (!osc.isMuted()) {
-                totalSample += osc.getNextSample();
-                activeOscs++;
+            // CÁLCULO UNIFICADO DEL CUTOFF DEL FILTRO
+            if (filtroActivado) {
+                double cutoffModulation = 0.0;
+                // Sumamos la modulación del ADSR del filtro
+                cutoffModulation += (filterEnv * filterEnvelopeAmount);
+                // Sumamos la modulación del LFO (si está apuntando al Cutoff)
+                if (lfoActivado && lfo.getTarget() == LFO.Target.FILTER_CUTOFF) {
+                    cutoffModulation += (lfoModValue * LFO_CUTOFF_RANGE);
+                }
+                double finalCutoff = baseFilterCutoff + cutoffModulation;
+                // Protegemos el filtro para que no explote
+                finalCutoff = Math.max(20, Math.min(20000, finalCutoff));
+                filtro.setFrecuenciaCorte(finalCutoff);
             }
         }
-
-        double muestraMezclada = activeOscs > 0 ? totalSample / activeOscs : 0.0;
-
-        // APLICAR ADSR
-        double envolvente = adsr.getNextEnvelope();
-        muestraMezclada *= envolvente;
-
+        // 3. Mezcla y procesamiento de audio
+        double totalSample = 0;
+        for (Oscilator osc : oscillators) {
+            totalSample += osc.getNextSample();
+        }
+        double muestraMezclada = totalSample / NUM_OSCILLATORS;
+        // APLICAR ADSR DE VOLUMEN (Amp Env)
+        muestraMezclada *= ampEnv;
+        // APLICAR TREMOLO (Volumen del LFO)
         if (lfoActivado && lfo.getTarget() == LFO.Target.OSC_VOLUME) {
             muestraMezclada *= lfoVolumeGain;
         }
-
+        // APLICAR FILTRO DIGITAL
         if (filtroActivado) {
             muestraMezclada = filtro.procesar(muestraMezclada);
         }
-
         return muestraMezclada;
     }
 
@@ -153,10 +193,6 @@ public class Sintetizador {
                 break;
 
             case OSC_VOLUME:
-                // Efecto Tremolo: oscila el volumen alrededor de 1.0
-                // (1.0 - rango) a 1.0
-                // Hacemos que sea unipolar (0 a 1) o bipolar dependiendo del gusto.
-                // Aquí simplemente restamos ganancia según el LFO.
                 double volMod = (modValue * LFO_VOLUME_RANGE);
                 // Aseguramos que el volumen esté entre 0.0 y 1.0
                 lfoVolumeGain = Math.max(0.0, Math.min(1.0, 1.0 - Math.abs(volMod)));
@@ -177,7 +213,6 @@ public class Sintetizador {
                     osc.setKeyFrequency(modulatedFreq);
                 }
                 break;
-
             case NONE:
                 break;
         }
@@ -187,12 +222,12 @@ public class Sintetizador {
      * Genera un bloque de audio para guardar (WAV)
      */
     public short[] generateSample(int numSamples) {
-        for (Oscilator osc : oscillators) {
-            osc.resetPhase();
-        }
-        // Reseteamos filtro y LFO para que la grabación empiece limpia
+        for (Oscilator osc : oscillators) osc.resetPhase();
         filtro.reset();
         lfo.reset();
+
+        adsr.noteOn();
+        filterAdsr.noteOn(); // Para que suene al exportar/guardar
 
         short[] s = new short[numSamples];
         for (int i = 0; i < numSamples; i++) {
@@ -205,15 +240,14 @@ public class Sintetizador {
     // --- MANEJO DE TECLADO ---
 
     public void onKeyPressed(char keyChar) {
-        if (!KEY_FREQUENCIES.containsKey(keyChar)) {
-            return;
-        }
-        // Guardamos la nota original pulsada
+        if (!KEY_FREQUENCIES.containsKey(keyChar)) return;
         currentBaseFrequency = KEY_FREQUENCIES.get(keyChar);
         setFrequency(currentBaseFrequency);
-
         noteIsPressed = true;
-        adsr.noteOn(); // (Asumiendo que ya pusiste el código del ADSR)
+
+        // Disparamos ambas envolventes
+        adsr.noteOn();
+        filterAdsr.noteOn();
 
         if (hiloAudio.isInitialized() && !hiloAudio.isRunning()) {
             hiloAudio.triggerPlayBack();
@@ -222,7 +256,8 @@ public class Sintetizador {
 
     public void onKeyReleased() {
         noteIsPressed = false;
-        adsr.noteOff(); // Iniciamos el Release (el audio sigue sonando hasta que se apague)
+        adsr.noteOff();
+        filterAdsr.noteOff(); // Soltamos el filtro
     }
 
     // Y un getter para la UI:

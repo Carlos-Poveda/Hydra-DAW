@@ -17,6 +17,11 @@ import javafx.scene.control.*;
 import org.example.tunesfx.synth.LFO;
 
 public class SintetizadorController {
+    @FXML private Slider filterEnvAmountSlider;
+    @FXML private Slider filterEnvAttackSlider;
+    @FXML private Slider filterEnvDecaySlider;
+    @FXML private Slider filterEnvSustainSlider;
+    @FXML private Slider filterEnvReleaseSlider;
     @FXML private Slider adsrAttackSlider;
     @FXML private Slider adsrDecaySlider;
     @FXML private Slider adsrSustainSlider;
@@ -79,6 +84,7 @@ public class SintetizadorController {
         configurarFiltro();
         configurarLFO();
         configurarADSR();
+        configurarFilterADSR();
     }
 
     private void configurarADSR() {
@@ -219,6 +225,34 @@ public class SintetizadorController {
             logic.setFiltroActivado(newVal);
         });
     }
+
+    private void configurarFilterADSR() {
+        var filterAdsr = logic.getFilterAdsr();
+
+        // Configurar el slider del Amount (Rango: de -10000 Hz a +10000 Hz)
+        // Valores negativos hacen que el filtro se cierre al pulsar la nota en vez de abrirse.
+        filterEnvAmountSlider.setMin(-10000);
+        filterEnvAmountSlider.setMax(10000);
+        filterEnvAmountSlider.setValue(0); // Por defecto en 0 (sin efecto)
+        filterEnvAmountSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            logic.setFilterEnvelopeAmount(newVal.doubleValue());
+        });
+
+        // Sliders de tiempo y nivel del ADSR
+        filterEnvAttackSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            filterAdsr.setAttackTime(newVal.doubleValue());
+        });
+        filterEnvDecaySlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            filterAdsr.setDecayTime(newVal.doubleValue());
+        });
+        filterEnvSustainSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            filterAdsr.setSustainLevel(newVal.doubleValue());
+        });
+        filterEnvReleaseSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            filterAdsr.setReleaseTime(newVal.doubleValue());
+        });
+    }
+
     private void actualizarLabelsFiltro() {
         filterCutoffLabel.setText(String.format("%.0f Hz", filterCutoffSlider.getValue()));
         filterResonanceLabel.setText(String.format("%.2f", filterResonanceSlider.getValue()));
@@ -240,11 +274,6 @@ public class SintetizadorController {
         Sample newSample = new Sample(sampleData);
         SampleBank.getInstance().setCurrentSample(newSample);
     }
-
-    /**
-     * Métodos públicos para que el Stage (creado en Principal)
-     * pueda reenviar los eventos a este controlador.
-     */
 
     public void handleKeyPressed(KeyEvent e) {
         String keyString = e.getText();
