@@ -137,6 +137,6 @@
         <Button fx:id="guardarSample" layoutX="450.0" layoutY="610.0" text="Save Sample"
                 style="-fx-background-color: #fff; -fx-text-fill: black;" prefWidth="120"/>
         <Label layoutX="450.0" layoutY="570.0" text="Length (s):" textFill="WHITE"/>
-        <Spinner fx:id="sampleLengthSpinner" editable="true" layoutX="520.0" layoutY="570.0" prefWidth="80.0" />
+        <Spinner fx:id="sampleLengthSpinner" editable="false" layoutX="520.0" layoutY="570.0" prefWidth="80.0" />
     </children>
 </Pane>

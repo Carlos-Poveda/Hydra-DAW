@@ -48,9 +48,10 @@ public class Filter {
         double sinW0 = Math.sin(w0);
 
 // Mapear la resonancia (0.0 - 1.0) a un valor Q útil.
-// Q = 0.707 es plano. Q > 1 empieza a resonar. Q = 5 o 10 es muy resonante.
-// Fórmula: Q va de 0.707 a 10.0
-        double q = 0.707 + (resonancia * 9.0);
+// Q = 0.707 es plano. Q > 1 empieza a resonar.
+// Limitamos el Q a ~4 para que el pico resonante no amplifique la señal
+// hasta hacer que desborde la salida (petardazos al modular el cutoff).
+        double q = 0.707 + (resonancia * 3.3);
 
         double alpha = sinW0 / (2 * q);
 
@@ -104,6 +105,13 @@ public class Filter {
 // Fórmula estándar Biquad (Forma Directa I)
 // y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
         double salida = (a0 * entrada) + (a1 * x1) + (a2 * x2) - (b1 * y1) - (b2 * y2);
+
+// Red de seguridad: si el filtro se desestabiliza (NaN, infinito o un valor
+// desproporcionado), reiniciamos su estado en lugar de propagar el error.
+        if (!Double.isFinite(salida) || Math.abs(salida) > 1e6) {
+            reset();
+            return 0.0;
+        }
 
 // Mover el historial (shift buffers)
         x2 = x1;

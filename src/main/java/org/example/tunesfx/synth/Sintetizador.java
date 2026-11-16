@@ -30,10 +30,17 @@ public class Sintetizador {
     private double currentBaseFrequency = 440.0;
 
     // --- Rangos de Modulación ---
-    private static final double LFO_CUTOFF_RANGE = 3000.0;
+    private static final double LFO_CUTOFF_OCTAVES = 2.0; // ±2 octavas
     private static final double LFO_RESONANCE_RANGE = 0.5;
     private static final double LFO_VOLUME_RANGE = 0.8; // Modula el volumen un 80%
     private static final double LFO_PITCH_RANGE = 12.0; // Modulación máxima de Pitch. 12.0 = 12 semitonos (1 octava hacia arriba/abajo)
+
+    // --- Suavizado de parámetros ---
+    // Al modular el filtro, los coeficientes no se cambian de golpe: se
+    // interpolan hacia su destino para evitar clics y "zipper noise".
+    private static final double PARAM_SMOOTHING = 0.3;
+    private double smoothedCutoff = 1000.0;
+    private double smoothedResonance = 0.5;
 
     // --- OPTIMIZACIÓN: Control Rate ---
     // Actualizamos parámetros de LFO/Filtro cada 64 muestras (aprox 1.4ms)
@@ -115,14 +122,11 @@ public class Sintetizador {
             double lfoModValue = 0.0;
 
             // Procesar LFO
-            if (lfoActivado && lfo.getTarget() != LFO.Target.NONE) {
+            boolean lfoActive = lfoActivado && lfo.getTarget() != LFO.Target.NONE;
+            if (lfoActive) {
                 lfoModValue = lfo.getModulationValue(CONTROL_RATE_SAMPLES);
 
                 switch (lfo.getTarget()) {
-                    case FILTER_RESONANCE:
-                        double modRes = baseFilterResonance + (lfoModValue * LFO_RESONANCE_RANGE);
-                        filtro.setResonancia(Math.max(0.1, Math.min(1.0, modRes)));
-                        break;
                     case OSC_VOLUME:
                         double volMod = lfoModValue * LFO_VOLUME_RANGE;
                         lfoVolumeGain = Math.max(0.0, Math.min(1.0, 1.0 - Math.abs(volMod)));
@@ -134,25 +138,35 @@ public class Sintetizador {
                             osc.setKeyFrequency(currentBaseFrequency * pitchMultiplier);
                         }
                         break;
-                    default: break; // Cutoff se procesa abajo
+                    default: break; // Cutoff y resonancia se procesan abajo
                 }
             } else {
                 lfoVolumeGain = 1.0;
             }
-            // CÁLCULO UNIFICADO DEL CUTOFF DEL FILTRO
-            if (filtroActivado) {
-                double cutoffModulation = 0.0;
-                // Sumamos la modulación del ADSR del filtro
-                cutoffModulation += (filterEnv * filterEnvelopeAmount);
-                // Sumamos la modulación del LFO (si está apuntando al Cutoff)
-                if (lfoActivado && lfo.getTarget() == LFO.Target.FILTER_CUTOFF) {
-                    cutoffModulation += (lfoModValue * LFO_CUTOFF_RANGE);
-                }
-                double finalCutoff = baseFilterCutoff + cutoffModulation;
-                // Protegemos el filtro para que no explote
-                finalCutoff = Math.max(20, Math.min(20000, finalCutoff));
-                filtro.setFrecuenciaCorte(finalCutoff);
+
+            // --- CUTOFF: modulación exponencial (octavas) + suavizado ---
+            // El ADSR del filtro suma en Hz; el LFO multiplica en octavas, que
+            // es como funcionan los sintetizadores reales y evita que el corte
+            // caiga siempre al mínimo de 20 Hz.
+            double lfoOctaves = 0.0;
+            if (lfoActive && lfo.getTarget() == LFO.Target.FILTER_CUTOFF) {
+                lfoOctaves = lfoModValue * LFO_CUTOFF_OCTAVES;
             }
+            double finalCutoff = (baseFilterCutoff + (filterEnv * filterEnvelopeAmount))
+                    * Math.pow(2.0, lfoOctaves);
+            // Protegemos el filtro para que no explote
+            finalCutoff = Math.max(20.0, Math.min(20000.0, finalCutoff));
+            smoothedCutoff += (finalCutoff - smoothedCutoff) * PARAM_SMOOTHING;
+            filtro.setFrecuenciaCorte(smoothedCutoff);
+
+            // --- RESONANCIA: modulación + suavizado ---
+            double targetResonance = baseFilterResonance;
+            if (lfoActive && lfo.getTarget() == LFO.Target.FILTER_RESONANCE) {
+                targetResonance += lfoModValue * LFO_RESONANCE_RANGE;
+            }
+            targetResonance = Math.max(0.1, Math.min(1.0, targetResonance));
+            smoothedResonance += (targetResonance - smoothedResonance) * PARAM_SMOOTHING;
+            filtro.setResonancia(smoothedResonance);
         }
         // 3. Mezcla y procesamiento de audio
         double totalSample = 0;
@@ -170,52 +184,13 @@ public class Sintetizador {
         if (filtroActivado) {
             muestraMezclada = filtro.procesar(muestraMezclada);
         }
-        return muestraMezclada;
-    }
-
-    private void aplicarModulacionLFO(int samples) {
-        // Obtenemos un valor entre -Amount y +Amount
-        double modValue = lfo.getModulationValue(samples);
-
-        switch (lfo.getTarget()) {
-            case FILTER_CUTOFF:
-                // Modulamos sobre la base establecida por el slider
-                double modulatedCutoff = baseFilterCutoff + (modValue * LFO_CUTOFF_RANGE);
-                modulatedCutoff = Math.max(20, Math.min(20000, modulatedCutoff));
-                filtro.setFrecuenciaCorte(modulatedCutoff);
-                break;
-
-            case FILTER_RESONANCE:
-                // Modulamos sobre la base establecida por el slider
-                double modulatedResonance = baseFilterResonance + (modValue * LFO_RESONANCE_RANGE);
-                modulatedResonance = Math.max(0.1, Math.min(1.0, modulatedResonance));
-                filtro.setResonancia(modulatedResonance);
-                break;
-
-            case OSC_VOLUME:
-                double volMod = (modValue * LFO_VOLUME_RANGE);
-                // Aseguramos que el volumen esté entre 0.0 y 1.0
-                lfoVolumeGain = Math.max(0.0, Math.min(1.0, 1.0 - Math.abs(volMod)));
-                break;
-
-            case PITCH:
-                // 1. Calculamos cuántos semitonos nos movemos (ej: +3.5 semitonos)
-                double pitchModSemitones = modValue * LFO_PITCH_RANGE;
-
-                // 2. Fórmula musical: Multiplicador de frecuencia = 2^(semitonos / 12)
-                double pitchMultiplier = Math.pow(2.0, pitchModSemitones / 12.0);
-
-                // 3. Calculamos la nueva frecuencia sobre la BASE, no sobre la anterior
-                double modulatedFreq = currentBaseFrequency * pitchMultiplier;
-
-                // 4. Se la mandamos a los osciladores
-                for (Oscilator osc : oscillators) {
-                    osc.setKeyFrequency(modulatedFreq);
-                }
-                break;
-            case NONE:
-                break;
+        // Protección: nunca dejamos que un valor fuera de rango (o NaN/Infinito)
+        // llegue al cast a short, porque desbordaría y produciría un petardazo.
+        if (!Double.isFinite(muestraMezclada)) {
+            filtro.reset();
+            return 0.0;
         }
+        return Math.max(-1.0, Math.min(1.0, muestraMezclada));
     }
 
     /**
@@ -271,18 +246,25 @@ public class Sintetizador {
     // FILTRO
     public void setFiltroActivado(boolean activado) {
         this.filtroActivado = activado;
-        if (!activado) filtro.reset();
+        // Al activar o desactivar, limpiamos el estado para que no se cuele
+        // energía acumulada del filtro anterior (evita clics y petardazos).
+        filtro.reset();
     }
     public boolean isFiltroActivado() { return filtroActivado; }
 
-    public void setTipoFiltro(Filter.Tipo tipo) { filtro.setTipo(tipo); }
+    public void setTipoFiltro(Filter.Tipo tipo) {
+        filtro.setTipo(tipo);
+        // Cambiar de tipo sin limpiar el estado deja valores incoherentes.
+        filtro.reset();
+    }
     public Filter.Tipo getTipoFiltro() { return filtro.getTipo(); }
 
     public void setFrecuenciaCorteFiltro(double frecuencia) {
         this.baseFilterCutoff = frecuencia; // Guardamos la base
         // Si el LFO no está controlando esto, actualizamos el filtro directamente
         if (!lfoActivado || lfo.getTarget() != LFO.Target.FILTER_CUTOFF) {
-            filtro.setFrecuenciaCorte(frecuencia);
+            smoothedCutoff = Math.max(20.0, Math.min(20000.0, frecuencia));
+            filtro.setFrecuenciaCorte(smoothedCutoff);
         }
     }
     public double getFrecuenciaCorteFiltro() { return baseFilterCutoff; } // UI lee la base
@@ -290,7 +272,8 @@ public class Sintetizador {
     public void setResonanciaFiltro(double resonancia) {
         this.baseFilterResonance = resonancia; // Guardamos la base
         if (!lfoActivado || lfo.getTarget() != LFO.Target.FILTER_RESONANCE) {
-            filtro.setResonancia(resonancia);
+            smoothedResonance = Math.max(0.1, Math.min(1.0, resonancia));
+            filtro.setResonancia(smoothedResonance);
         }
     }
     public double getResonanciaFiltro() { return baseFilterResonance; } // UI lee la base
@@ -300,9 +283,8 @@ public class Sintetizador {
         this.lfoActivado = activado;
         if (!activado) {
             lfo.reset();
-            // Restaurar valores base al apagar LFO
-            filtro.setFrecuenciaCorte(baseFilterCutoff);
-            filtro.setResonancia(baseFilterResonance);
+            // El cutoff y la resonancia vuelven suavemente a su valor base en el
+            // siguiente bloque de control; no los cambiamos de golpe para no clicar.
             lfoVolumeGain = 1.0;
 
             setFrequency(currentBaseFrequency);
@@ -321,10 +303,9 @@ public class Sintetizador {
     public double getLFOAmount() { return lfo.getAmount(); }
 
     public void setLFOTarget(LFO.Target target) {
-        // Si cambiamos de target, restauramos los valores del target anterior
+        // Si cambiamos de destino, restauramos los valores del anterior.
+        // El cutoff y la resonancia se recuperan suavemente en el bucle de control.
         if (lfoActivado) {
-            filtro.setFrecuenciaCorte(baseFilterCutoff);
-            filtro.setResonancia(baseFilterResonance);
             lfoVolumeGain = 1.0;
 
             setFrequency(currentBaseFrequency);
