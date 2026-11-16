@@ -12,9 +12,12 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.12.1</junit.version>
+        <lwjgl.version>3.3.6</lwjgl.version>
+        <lwjgl.natives>natives-windows</lwjgl.natives>
     </properties>
 
     <dependencies>
+        <!-- JavaFX -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -26,6 +29,33 @@
             <version>21.0.6</version>
         </dependency>
 
+        <!-- LWJGL Core -->
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl</artifactId>
+            <version>${lwjgl.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl</artifactId>
+            <version>${lwjgl.version}</version>
+            <classifier>${lwjgl.natives}</classifier>
+        </dependency>
+
+        <!-- LWJGL OpenAL (Audio) -->
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl-openal</artifactId>
+            <version>${lwjgl.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.lwjgl</groupId>
+            <artifactId>lwjgl-openal</artifactId>
+            <version>${lwjgl.version}</version>
+            <classifier>${lwjgl.natives}</classifier>
+        </dependency>
+
+        <!-- JUnit -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
@@ -57,7 +87,6 @@
                 <version>0.0.8</version>
                 <executions>
                     <execution>
-                        <!-- Default configuration for running with: mvn clean javafx:run -->
                         <id>default-cli</id>
                         <configuration>
                             <mainClass>org.example.tunesfx/org.example.tunesfx.HelloApplication</mainClass>

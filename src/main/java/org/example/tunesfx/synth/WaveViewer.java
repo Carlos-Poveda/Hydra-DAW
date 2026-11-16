@@ -1,13 +1,12 @@
 package org.example.tunesfx.synth;
 
-import javafx.fxml.FXML; // Importar
-import javafx.fxml.FXMLLoader; // Importar
+import javafx.fxml.FXML; 
+import javafx.fxml.FXMLLoader; 
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-
-import java.io.IOException; // Importar
+import java.io.IOException; 
 import java.util.function.Function;
 
 public class WaveViewer extends StackPane {
@@ -47,7 +46,7 @@ public class WaveViewer extends StackPane {
         final double height = canvas.getHeight();
 
         // 1. Limpiar el canvas
-        g.setFill(Color.rgb(13,0,0));
+        g.setFill(Color.web("#030707")); // COLOR DE FONDO DEL WAVEVIEWER        
         g.fillRect(0, 0, width, height);
 
         // 2. Lógica de dibujo (sin cambios de lógica)

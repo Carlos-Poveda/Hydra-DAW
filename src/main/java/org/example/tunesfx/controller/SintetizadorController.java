@@ -91,6 +91,11 @@ public class SintetizadorController {
         // El objeto ADSR ya vive dentro de la clase 'logic' (Sintetizador)
         var adsr = logic.getAdsr();
 
+     // 1. Establecer el valor inicial del Slider de Sustain al máximo
+        adsrSustainSlider.setValue(adsrSustainSlider.getMax());
+        // Forzar que la lógica del sintetizador coja también ese valor máximo inicial
+        adsr.setSustainLevel(adsrSustainSlider.getValue());
+        
         // Listener para el Attack (0 a 2000 ms)
         adsrAttackSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
             adsr.setAttackTime(newVal.doubleValue());

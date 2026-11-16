@@ -50,7 +50,7 @@
 
 /* Estilo del "pulgar" (la parte que arrastras) */
 .scroll-bar .thumb {
-    -fx-background-color: #555555; /* Un gris más claro */
+    -fx-background-color: #555555; 
     -fx-background-radius: 5; /* Bordes redondeados */
 }
 
@@ -204,7 +204,7 @@
 
 /* El contenedor del divisor */
 .split-pane > .split-pane-divider {
-    -fx-background-color: #444444; /* Color muy oscuro (casi negro) */
+    -fx-background-color: #444444; 
     -fx-border-color: transparent;
     -fx-padding: 0 2 0 2; /* Esto controla el GROSOR de la línea (2px) */
 }
