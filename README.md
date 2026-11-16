@@ -2,7 +2,7 @@
 
 Programa de desarrollo musical desarrollado en Java usando la librería de sonido de LWJGL.
 
-![Interfaz de HYDRA DAW](images/hydra.png)
+![Interfaz de HYDRA DAW](src/main/resources/images/hydra.png)
 
 ## 🚀 Características
 - Creación de sonidos usando el sintetizador
