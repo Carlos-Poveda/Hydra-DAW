@@ -11,7 +11,7 @@ public class Sintetizador {
     private boolean shouldGenerate;
     private static final int NUM_OSCILLATORS = 5;
 
-    // --- Componentes ---
+    // Componentes
     private Oscilator[] oscillators;
     private WaveViewer waveViewer;
     private Filter filtro;
@@ -19,37 +19,33 @@ public class Sintetizador {
     private ADSR adsr = new ADSR();
     private boolean noteIsPressed = false;
 
-    // --- Estados ---
-    private boolean filtroActivado = false; // Por defecto false para coincidir con UI
+    // Estados
+    private boolean filtroActivado = false;
     private boolean lfoActivado = false;
 
-    // --- Variables para Modulación Estable (Evitar drift) ---
+    // Variables para Modulación Estable
     private double baseFilterCutoff = 1000.0;
     private double baseFilterResonance = 0.5;
     private double lfoVolumeGain = 1.0; // Multiplicador de volumen (1.0 = normal)
     private double currentBaseFrequency = 440.0;
 
-    // --- Rangos de Modulación ---
+    // Rangos de Modulación ---
     private static final double LFO_CUTOFF_OCTAVES = 2.0; // ±2 octavas
     private static final double LFO_RESONANCE_RANGE = 0.5;
     private static final double LFO_VOLUME_RANGE = 0.8; // Modula el volumen un 80%
-    private static final double LFO_PITCH_RANGE = 12.0; // Modulación máxima de Pitch. 12.0 = 12 semitonos (1 octava hacia arriba/abajo)
+    private static final double LFO_PITCH_RANGE = 12.0; // Modulación máxima de Pitch
 
-    // --- Suavizado de parámetros ---
-    // Al modular el filtro, los coeficientes no se cambian de golpe: se
-    // interpolan hacia su destino para evitar clics y "zipper noise".
+    // Suavizado de parámetros 
+
     private static final double PARAM_SMOOTHING = 0.3;
     private double smoothedCutoff = 1000.0;
     private double smoothedResonance = 0.5;
 
-    // --- OPTIMIZACIÓN: Control Rate ---
-    // Actualizamos parámetros de LFO/Filtro cada 64 muestras (aprox 1.4ms)
-    // para no sobrecargar la CPU recalculando senos/cosenos 44100 veces/seg.
     private int controlCounter = 0;
     private static final int CONTROL_RATE_SAMPLES = 64;
 
     private Runnable updateCallback;
-    // Envolvente de Filtro ---
+    // Envolvente de Filtro
     private ADSR filterAdsr = new ADSR();
     private double filterEnvelopeAmount = 0.0; // En Hz (Ej: de -10000 a +10000)
 
@@ -57,9 +53,8 @@ public class Sintetizador {
     public void setFilterEnvelopeAmount(double amount) { this.filterEnvelopeAmount = amount; }
     public double getFilterEnvelopeAmount() { return filterEnvelopeAmount; }
 
-    // --- Hilo de Audio ---
+    // Hilo de Audio
     private final Audio hiloAudio = new Audio(() -> {
-        // Solo paramos si no hay tecla pulsada Y el ADSR ya se calló
         if (!noteIsPressed && adsr.isIdle()) {
             return null;
         }
@@ -87,11 +82,9 @@ public class Sintetizador {
         this.filtro = new Filter();
         this.lfo = new LFO();
 
-        // Configura los osciladores en el waveViewer
         this.waveViewer.setOscillators(this.oscillators);
     }
 
-    // --- Callback UI ---
     public void updateWaveviewer() {
         if (updateCallback != null) {
             updateCallback.run();
@@ -102,7 +95,7 @@ public class Sintetizador {
         this.updateCallback = callback;
     }
 
-    // --- LÓGICA DE AUDIO PRINCIPAL ---
+    // LÓGICA DE AUDIO PRINCIPAL
 
     public void setFrequency(double frequency) {
         for (Oscilator osc : oscillators) {
@@ -111,11 +104,9 @@ public class Sintetizador {
     }
 
     public double nextSample() {
-        // 1. Calculamos las envolventes muestra a muestra (es muy barato para la CPU)
         double ampEnv = adsr.getNextEnvelope();
         double filterEnv = filterAdsr.getNextEnvelope();
 
-        // 2. Control Rate: Actualizamos Filtro y LFO cada X muestras (Optimización)
         if (controlCounter++ >= CONTROL_RATE_SAMPLES) {
             controlCounter = 0;
 
@@ -138,28 +129,23 @@ public class Sintetizador {
                             osc.setKeyFrequency(currentBaseFrequency * pitchMultiplier);
                         }
                         break;
-                    default: break; // Cutoff y resonancia se procesan abajo
+                    default: break; 
                 }
             } else {
                 lfoVolumeGain = 1.0;
             }
 
-            // --- CUTOFF: modulación exponencial (octavas) + suavizado ---
-            // El ADSR del filtro suma en Hz; el LFO multiplica en octavas, que
-            // es como funcionan los sintetizadores reales y evita que el corte
-            // caiga siempre al mínimo de 20 Hz.
             double lfoOctaves = 0.0;
             if (lfoActive && lfo.getTarget() == LFO.Target.FILTER_CUTOFF) {
                 lfoOctaves = lfoModValue * LFO_CUTOFF_OCTAVES;
             }
             double finalCutoff = (baseFilterCutoff + (filterEnv * filterEnvelopeAmount))
                     * Math.pow(2.0, lfoOctaves);
-            // Protegemos el filtro para que no explote
             finalCutoff = Math.max(20.0, Math.min(20000.0, finalCutoff));
             smoothedCutoff += (finalCutoff - smoothedCutoff) * PARAM_SMOOTHING;
             filtro.setFrecuenciaCorte(smoothedCutoff);
 
-            // --- RESONANCIA: modulación + suavizado ---
+            // RESONANCIA: modulación + suavizado
             double targetResonance = baseFilterResonance;
             if (lfoActive && lfo.getTarget() == LFO.Target.FILTER_RESONANCE) {
                 targetResonance += lfoModValue * LFO_RESONANCE_RANGE;
@@ -174,18 +160,15 @@ public class Sintetizador {
             totalSample += osc.getNextSample();
         }
         double muestraMezclada = totalSample / NUM_OSCILLATORS;
-        // APLICAR ADSR DE VOLUMEN (Amp Env)
         muestraMezclada *= ampEnv;
-        // APLICAR TREMOLO (Volumen del LFO)
         if (lfoActivado && lfo.getTarget() == LFO.Target.OSC_VOLUME) {
             muestraMezclada *= lfoVolumeGain;
         }
-        // APLICAR FILTRO DIGITAL
+
         if (filtroActivado) {
             muestraMezclada = filtro.procesar(muestraMezclada);
         }
-        // Protección: nunca dejamos que un valor fuera de rango (o NaN/Infinito)
-        // llegue al cast a short, porque desbordaría y produciría un petardazo.
+
         if (!Double.isFinite(muestraMezclada)) {
             filtro.reset();
             return 0.0;
@@ -193,16 +176,13 @@ public class Sintetizador {
         return Math.max(-1.0, Math.min(1.0, muestraMezclada));
     }
 
-    /**
-     * Genera un bloque de audio para guardar (WAV)
-     */
     public short[] generateSample(int numSamples) {
         for (Oscilator osc : oscillators) osc.resetPhase();
         filtro.reset();
         lfo.reset();
 
         adsr.noteOn();
-        filterAdsr.noteOn(); // Para que suene al exportar/guardar
+        filterAdsr.noteOn(); 
 
         short[] s = new short[numSamples];
         for (int i = 0; i < numSamples; i++) {
@@ -212,7 +192,7 @@ public class Sintetizador {
         return s;
     }
 
-    // --- MANEJO DE TECLADO ---
+    // MANEJO DE TECLADO
 
     public void onKeyPressed(char keyChar) {
         if (!KEY_FREQUENCIES.containsKey(keyChar)) return;
@@ -220,7 +200,6 @@ public class Sintetizador {
         setFrequency(currentBaseFrequency);
         noteIsPressed = true;
 
-        // Disparamos ambas envolventes
         adsr.noteOn();
         filterAdsr.noteOn();
 
@@ -232,13 +211,11 @@ public class Sintetizador {
     public void onKeyReleased() {
         noteIsPressed = false;
         adsr.noteOff();
-        filterAdsr.noteOff(); // Soltamos el filtro
+        filterAdsr.noteOff(); 
     }
 
-    // Y un getter para la UI:
     public ADSR getAdsr() { return adsr; }
 
-    // --- GETTERS & SETTERS (Con lógica para valores base) ---
 
     public Oscilator[] getOscillatorsFX() { return oscillators; }
     public WaveViewer getWaveViewerFX() { return waveViewer; }
@@ -246,28 +223,25 @@ public class Sintetizador {
     // FILTRO
     public void setFiltroActivado(boolean activado) {
         this.filtroActivado = activado;
-        // Al activar o desactivar, limpiamos el estado para que no se cuele
-        // energía acumulada del filtro anterior (evita clics y petardazos).
+
         filtro.reset();
     }
     public boolean isFiltroActivado() { return filtroActivado; }
 
     public void setTipoFiltro(Filter.Tipo tipo) {
         filtro.setTipo(tipo);
-        // Cambiar de tipo sin limpiar el estado deja valores incoherentes.
         filtro.reset();
     }
     public Filter.Tipo getTipoFiltro() { return filtro.getTipo(); }
 
     public void setFrecuenciaCorteFiltro(double frecuencia) {
-        this.baseFilterCutoff = frecuencia; // Guardamos la base
-        // Si el LFO no está controlando esto, actualizamos el filtro directamente
+        this.baseFilterCutoff = frecuencia;
         if (!lfoActivado || lfo.getTarget() != LFO.Target.FILTER_CUTOFF) {
             smoothedCutoff = Math.max(20.0, Math.min(20000.0, frecuencia));
             filtro.setFrecuenciaCorte(smoothedCutoff);
         }
     }
-    public double getFrecuenciaCorteFiltro() { return baseFilterCutoff; } // UI lee la base
+    public double getFrecuenciaCorteFiltro() { return baseFilterCutoff; } 
 
     public void setResonanciaFiltro(double resonancia) {
         this.baseFilterResonance = resonancia; // Guardamos la base
@@ -276,15 +250,14 @@ public class Sintetizador {
             filtro.setResonancia(smoothedResonance);
         }
     }
-    public double getResonanciaFiltro() { return baseFilterResonance; } // UI lee la base
+    public double getResonanciaFiltro() { return baseFilterResonance; } 
 
     // LFO
     public void setLFOActivado(boolean activado) {
         this.lfoActivado = activado;
         if (!activado) {
             lfo.reset();
-            // El cutoff y la resonancia vuelven suavemente a su valor base en el
-            // siguiente bloque de control; no los cambiamos de golpe para no clicar.
+
             lfoVolumeGain = 1.0;
 
             setFrequency(currentBaseFrequency);
@@ -303,8 +276,7 @@ public class Sintetizador {
     public double getLFOAmount() { return lfo.getAmount(); }
 
     public void setLFOTarget(LFO.Target target) {
-        // Si cambiamos de destino, restauramos los valores del anterior.
-        // El cutoff y la resonancia se recuperan suavemente en el bucle de control.
+
         if (lfoActivado) {
             lfoVolumeGain = 1.0;
 
@@ -315,7 +287,7 @@ public class Sintetizador {
 
     public LFO.Target getLFOTarget() { return lfo.getTarget(); }
 
-    // --- Info interna ---
+    // Info interna
     public static class AudioInfo {
         public static final int SAMPLE_RATE = 44100;
     }

@@ -36,10 +36,9 @@ public class ChannelRackController {
     @FXML private VBox rackContainer;
     @FXML private Spinner<Integer> spinnerBPM;
 
-    // Lógica del secuenciador
     private Timeline sequencerTimeline;
     private boolean isPlaying = false;
-    private static double referenciaBPM = 120.0; // Beats Por Minuto
+    private static double referenciaBPM = 120.0; 
 
     private static final int NUM_STEPS = ChannelRackRowController.NUM_STEPS;
     private int currentStep = -1;
@@ -60,10 +59,10 @@ public class ChannelRackController {
 
     @FXML
     private void addSample(ActionEvent event) {
-        cargarSonidoExterno();
+        loadExternalSound();
     }
 
-    private void cargarSonidoExterno() {
+    private void loadExternalSound() {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Load sample (WAV)");
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Archivos de Audio WAV", "*.wav"));
@@ -83,9 +82,8 @@ public class ChannelRackController {
     }
 
     private void initializeSequencer() {
-        // Usamos el valor inicial de GlobalState
         double currentBpm = GlobalState.getBpm();
-        double beatDurationMillis = 60000.0 / 120.0; // Mantenemos 120 como base de escala
+        double beatDurationMillis = 60000.0 / 120.0; 
         double stepDurationMillis = beatDurationMillis / 4.0;
 
         sequencerTimeline = new Timeline();
@@ -94,13 +92,11 @@ public class ChannelRackController {
         KeyFrame keyFrame = new KeyFrame(Duration.millis(stepDurationMillis), e -> runSequencerStep());
         sequencerTimeline.getKeyFrames().add(keyFrame);
 
-        // Sincronizar velocidad inicial
         updateSequencerRate(currentBpm);
     }
 
     private void updateSequencerRate(double newBPM) {
         if (sequencerTimeline == null) return;
-        // El rate es relativo a la base de 120 BPM
         double newRate = newBPM / 120.0;
         sequencerTimeline.setRate(newRate);
     }
@@ -188,8 +184,6 @@ public class ChannelRackController {
     public void playSoundByName(String rowName) {
         for (ChannelRackRowController row : allRows) {
 
-            // Asumo que tienes un getter para el nombre. Si no, usa el label.
-            // Ojo: Asegúrate de que row.getTrackName() existe.
             if (row.getTrackName().equals(rowName)) {
                 schedulePatternPlayback(row);
                 return;
@@ -202,7 +196,6 @@ public class ChannelRackController {
     public void stopSoundByName(String rowName) {
         for (ChannelRackRowController row : allRows) {
             if (row.getTrackName().equals(rowName)) {
-                // Aquí llamaremos al método que cancela el audio
                 stopPatternPlayback(row);
                 return;
             }
@@ -215,7 +208,6 @@ public class ChannelRackController {
         Sample sample = row.getSample();
         if (sample == null) return;
 
-        // Preparamos la lista para esta fila
         List<PauseTransition> rowTransitions = new ArrayList<>();
         activeSchedulers.put(row, rowTransitions);
 
@@ -238,7 +230,6 @@ public class ChannelRackController {
     }
 
     private void stopPatternPlayback(ChannelRackRowController row) {
-        // 1. Cancelar todos los temporizadores pendientes (evita que suenen pasos futuros)
         List<PauseTransition> transitions = activeSchedulers.get(row);
         if (transitions != null) {
             for (PauseTransition pt : transitions) {
@@ -248,8 +239,7 @@ public class ChannelRackController {
             activeSchedulers.remove(row);
         }
 
-        // 2. Detener el audio que esté sonando actualmente en esa fila
-        // Para esto, necesitamos que SamplePlayer sepa qué fuente detener.
+
         SamplePlayer.stopSample(row.getSample());
     }
 
@@ -280,7 +270,6 @@ public class ChannelRackController {
         }
     }
 
-    // Método para apagar todo si cierran la ventana
     public void shutdown() {
         stopSequencer();
     }

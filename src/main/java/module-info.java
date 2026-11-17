@@ -5,6 +5,7 @@ module org.example.tunesfx {
     requires java.datatransfer;
     requires java.desktop;
     requires javafx.graphics;
+    requires java.prefs;
 
     opens org.example.tunesfx to javafx.fxml, javafx.graphics;
     exports org.example.tunesfx;

@@ -86,7 +86,6 @@ public class ChannelRackRowController {
             }
 
         } else if (event.getButton() == MouseButton.SECONDARY) {
-            // --- CLICK DERECHO: Menú de Tono ---
             showMenu(clickedButton, data, event.getScreenX(), event.getScreenY());
         }
     }
@@ -180,7 +179,7 @@ public class ChannelRackRowController {
         VBox durationBox = new VBox(durationLabel, durationSlider);
         durationBox.setPadding(new Insets(5));
         CustomMenuItem durationItem = new CustomMenuItem(durationBox);
-        durationItem.setHideOnClick(false); // No se cierra al interactuar con el Slider
+        durationItem.setHideOnClick(false);
         menu.getItems().add(durationItem);
 
         // --- SECCIÓN 6: DELAY (Slider) ---
@@ -222,7 +221,7 @@ public class ChannelRackRowController {
         menu.getItems().add(panItem);
     }
 
-    // Pequeña ayuda visual: poner un numerito en el botón si tiene pitch
+    // Numerito en el botón si tiene pitch
     private void updateButtonText(Button btn, StepData data) {
         int offset = data.getSemitoneOffset();
         if (offset == 0) {
@@ -234,7 +233,6 @@ public class ChannelRackRowController {
     }
 
     public void handleLabelClick(MouseEvent event) {
-        // Detectar Click Derecho (Secundario)
         if (event.getButton() == MouseButton.SECONDARY) {
             showTrackSettingsMenu(event.getScreenX(), event.getScreenY());
         }
@@ -244,9 +242,8 @@ public class ChannelRackRowController {
 
     private void showTrackSettingsMenu(double x, double y) {
         ContextMenu menu = new ContextMenu();
-        menu.getStyleClass().add("context-menu"); // Usar tu estilo CSS existente
+        menu.getStyleClass().add("context-menu"); 
 
-        // --- PARTE 1: RENOMBRAR (Tu código anterior mejorado) ---
         TextField renameField = new TextField(trackNameLabel.getText());
         renameField.setPromptText("Renombrar pista...");
         renameField.setStyle("-fx-background-color: #333333; -fx-text-fill: white;"); // Estilo oscuro
@@ -272,28 +269,24 @@ public class ChannelRackRowController {
 
         menu.getItems().add(new SeparatorMenuItem());
 
-        // Obtenemos los datos del primer paso para poner los valores iniciales de los sliders
         StepData referenceData = (StepData) stepBtn1.getUserData();
 
         // 1. Botón Enviar a Playlist
         MenuItem sendToPlaylistItem = new MenuItem("Send to Playlist as Pattern");
 
         sendToPlaylistItem.setOnAction(e -> {
-            // Prioridad: Si hay algo escrito en el TextField de renombrar, usamos eso.
-            // Si no, usamos el texto actual del Label.
+
             String nameToSend = renameField.getText().trim();
             if (nameToSend.isEmpty()) {
                 nameToSend = trackNameLabel.getText();
             } else {
-                // Aprovechamos para actualizar el label si el usuario escribió algo y no dio Enter
                 trackNameLabel.setText(nameToSend);
             }
 
-            // Enviamos a la ventana principal usando el puente
             PrincipalController pc = GlobalState.getPrincipalController();
             if (pc != null) {
                 pc.addPatternFromSample(nameToSend);
-                menu.hide(); // Cerramos el menú tras enviar
+                menu.hide(); 
             } else {
                 System.err.println("Error: No se encontró la ventana principal.");
             }
@@ -387,7 +380,7 @@ public class ChannelRackRowController {
         menu.show(trackNameLabel, x, y);
         renameField.requestFocus();
     }
-    // Pequeño helper para no repetir el código de añadir sliders al menú
+
     private void addSliderToMenu(ContextMenu menu, Label label, Slider slider) {
         VBox box = new VBox(label, slider);
         box.setPadding(new Insets(5));
@@ -396,24 +389,16 @@ public class ChannelRackRowController {
         item.setStyle("-fx-background-color: transparent;");
         menu.getItems().add(item);
     }
-    /**
-     * Método público para el PrincipalController.
-     * Ya no miramos el estilo CSS, miramos el objeto de datos.
-     */
+ 
     public StepData getStepData(int step) {
         if (step < 0 || step >= stepButtons.size()) return null;
         return (StepData) stepButtons.get(step).getUserData();
     }
-    /**
-     * El PrincipalController usará esto para decirnos
-     * QUÉ hacer cuando se pulse el botón de borrado.
-     */
+
     public void setOnDelete(Runnable callback) {
         this.deleteCallback = callback;
     }
-    /**
-     * Se llama cuando se pulsa el botón 'X' de esta fila.
-     */
+
     @FXML
     private void handleDeleteRow() {
         if (deleteCallback != null) {
@@ -422,71 +407,53 @@ public class ChannelRackRowController {
             System.err.println("Error al borrar la fila.");
         }
     }
-    /**
-     * El controlador principal llamará a esto para asignar un sample a esta fila.
-     */
+
     public void setSample(Sample sample) {
         this.mySample = sample;
-        // Opcional: poner un nombre
+        // Poner nombre
         // this.trackNameLabel.setText("Sample " + sample.hashCode());
     }
-    /**
-     * Devuelve el sample asignado a esta fila.
-     */
+ 
     public Sample getSample() {
         return mySample;
     }
-    /**
-     * Comprueba si un paso específico está "encendido".
-     */
+
     public boolean isStepOn(int step) {
         if (step < 0 || step >= stepButtons.size()) return false;
         return stepButtons.get(step).getStyleClass().contains("step-button-on");
     }
-    /**
-     * Resalta el botón del paso actual (playhead).
-     */
+
     public void setPlayhead(int step) {
         if (step < 0 || step >= stepButtons.size()) return;
         stepButtons.get(step).getStyleClass().add("step-button-playhead");
     }
-    /**
-     * Limpia el resaltado del playhead del botón.
-     */
+
     public void clearPlayhead(int step) {
         if (step < 0 || step >= stepButtons.size()) return;
         stepButtons.get(step).getStyleClass().remove("step-button-playhead");
     }
-    /**
-     * Devuelve el índice del último paso activo en esta fila.
-     * Si no hay ninguno, devuelve -1.
-     */
+
     public int getLastActiveStepIndex() {
-        // Recorremos de atrás hacia adelante (desde el paso 63 hasta el 0)
         for (int i = stepButtons.size() - 1; i >= 0; i--) {
             StepData data = getStepData(i);
             if (data != null && data.isActive()) {
                 return i;
             }
         }
-        return -1; // Fila vacía
+        return -1; 
     }
-    /**
-     * Helper para aplicar un cambio a TODOS los pasos de la fila.
-     */
+
     private void applyToAllSteps(java.util.function.Consumer<StepData> action) {
         for (Button btn : stepButtons) {
             StepData data = (StepData) btn.getUserData();
             if (data != null) {
                 action.accept(data);
-                // Si cambias el Pitch, hay que actualizar el texto del botón visualmente
-                // (Esta comprobación es específica para el pitch, pero no hace daño aquí)
+
                 updateButtonText(btn, data);
             }
         }
     }
 
-    // Método para obtener la configuración combinada (Knobs + Step específico)
     public StepData getCombinedStepData(int stepIndex) {
         StepData step = getStepData(stepIndex);
         if (step == null || !step.isActive()) return null;
@@ -499,17 +466,13 @@ public class ChannelRackRowController {
         }
     }
 
-    /**
-     * Carga un archivo WAV desde el disco y crea el objeto Sample.
-     */
+
     public void loadSample(File file) {
         if (file == null) return;
 
         try {
-            // Usamos tu utilidad existente AudioFileLoader
             short[] data = AudioFileLoader.loadSample(file);
 
-            // Creamos el sample y lo asignamos
             Sample newSample = new Sample(data);
             this.setSample(newSample);
 
@@ -519,13 +482,12 @@ public class ChannelRackRowController {
         }
     }
 
-    // Método para saber cuántos pasos tiene la fila
     public int getStepCount() {
         return NUM_STEPS;
     }
 
     private String formatPanLabel(double val) {
-        if (Math.abs(val) < 0.05) return "Center"; // Zona muerta en el centro
+        if (Math.abs(val) < 0.05) return "Center"; 
         if (val < 0) return "L " + (int)(Math.abs(val) * 100) + "%";
         return "R " + (int)(val * 100) + "%";
     }

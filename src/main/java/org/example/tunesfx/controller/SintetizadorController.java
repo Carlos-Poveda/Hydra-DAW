@@ -59,25 +59,26 @@ public class SintetizadorController {
                 oscilador1, oscilador2, oscilador3, oscilador4, oscilador5
         };
 // 1. Crear la instancia de la lógica del sintetizador
-// Pasamos los componentes de UI que la lógica necesita controlar.
+        
         logic = new Sintetizador(oscillators, waveViewer);
 // 2. Configurar los callbacks
-// El sintetizador (lógica) necesita decirle al WaveViewer (UI) cuándo dibujar
+
         logic.setUpdateCallback(waveViewer::draw);
-// Cada Oscilador (UI) necesita decirle al Sintetizador (lógica)
-// que la forma de onda cambió (para que actualice el WaveViewer).
         for (Oscilator osc : oscillators) {
             osc.setUpdateCallback(logic::updateWaveviewer);
         }
-// Configura el Spinner para que maneje segundos (Double)
+        
 // Mín: 0.1s, Máx: 10.0s, Valor inicial: 1.0s, Incremento: 0.1s
+        
         SpinnerValueFactory<Double> valueFactory =
                 new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 10.0, 1.0, 0.1);
+        
 // Para pillar el foco del spinner
+        
         rootPane.setFocusTraversable(true);
         rootPane.setOnMouseClicked(e -> {
             rootPane.requestFocus();
-            e.consume(); // Opcional: evita que el clic se propague
+            e.consume();
         });
         sampleLengthSpinner.setValueFactory(valueFactory);
         guardarSample.setOnAction(e -> handleSaveSample());
@@ -88,30 +89,23 @@ public class SintetizadorController {
     }
 
     private void configurarADSR() {
-        // El objeto ADSR ya vive dentro de la clase 'logic' (Sintetizador)
         var adsr = logic.getAdsr();
 
-     // 1. Establecer el valor inicial del Slider de Sustain al máximo
         adsrSustainSlider.setValue(adsrSustainSlider.getMax());
-        // Forzar que la lógica del sintetizador coja también ese valor máximo inicial
         adsr.setSustainLevel(adsrSustainSlider.getValue());
         
-        // Listener para el Attack (0 a 2000 ms)
         adsrAttackSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
             adsr.setAttackTime(newVal.doubleValue());
         });
 
-        // Listener para el Decay (0 a 2000 ms)
         adsrDecaySlider.valueProperty().addListener((obs, oldVal, newVal) -> {
             adsr.setDecayTime(newVal.doubleValue());
         });
 
-        // Listener para el Sustain (0.0 a 1.0)
         adsrSustainSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
             adsr.setSustainLevel(newVal.doubleValue());
         });
 
-        // Listener para el Release (0 a 5000 ms)
         adsrReleaseSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
             adsr.setReleaseTime(newVal.doubleValue());
         });
@@ -193,7 +187,6 @@ public class SintetizadorController {
         filterTypeCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
             logic.setTipoFiltro(newVal);
 
-// --- NUEVO: SINCRONIZAR LOS SLIDERS CON LOS VALORES POR DEFECTO DEL FILTRO ---
             if (newVal != Filter.Tipo.OFF) {
 // Obtener los valores actuales del filtro y actualizar los sliders
                 filterCutoffSlider.setValue(logic.getFrecuenciaCorteFiltro());
@@ -219,11 +212,9 @@ public class SintetizadorController {
         });
 
         filterToggleButton.selectedProperty().addListener((obs, oldVal, newVal) -> {
-// Si se activa el toggle y el filtro está en OFF, cambiar a LOW_PASS
             if (newVal && filterTypeCombo.getValue() == Filter.Tipo.OFF) {
                 filterTypeCombo.setValue(Filter.Tipo.LOW_PASS);
             }
-// Si se desactiva el toggle, cambiar a OFF
             else if (!newVal) {
                 filterTypeCombo.setValue(Filter.Tipo.OFF);
             }
@@ -234,11 +225,9 @@ public class SintetizadorController {
     private void configurarFilterADSR() {
         var filterAdsr = logic.getFilterAdsr();
 
-        // Configurar el slider del Amount (Rango: de -10000 Hz a +10000 Hz)
-        // Valores negativos hacen que el filtro se cierre al pulsar la nota en vez de abrirse.
         filterEnvAmountSlider.setMin(-10000);
         filterEnvAmountSlider.setMax(10000);
-        filterEnvAmountSlider.setValue(0); // Por defecto en 0 (sin efecto)
+        filterEnvAmountSlider.setValue(0); 
         filterEnvAmountSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
             logic.setFilterEnvelopeAmount(newVal.doubleValue());
         });
@@ -267,11 +256,8 @@ public class SintetizadorController {
         double durationSeconds = sampleLengthSpinner.getValue();
         int sampleLength = (int) (durationSeconds * Sintetizador.AudioInfo.SAMPLE_RATE);
 
-        // Activamos la nota virtualmente para que el ADSR empiece en ATTACK
         logic.getAdsr().noteOn();
 
-        // Si quieres que el release empiece justo antes de acabar el sample:
-        // Calculamos en qué muestra debería soltarse la tecla (ej. 80% de la duración)
         int releaseStartSample = (int) (sampleLength * 0.8);
 
         short[] sampleData = logic.generateSample(sampleLength);

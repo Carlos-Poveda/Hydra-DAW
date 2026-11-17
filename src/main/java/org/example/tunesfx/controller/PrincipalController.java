@@ -22,6 +22,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.example.tunesfx.audio.AudioCoordinator;
@@ -32,11 +33,14 @@ import org.example.tunesfx.utils.GlobalState;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.prefs.Preferences;
 
 public class PrincipalController {
     @FXML private Button btnAjustes;
+    @FXML private Button btnAddToLibrary;
     @FXML private TreeView libraryTreeView;
     @FXML private Spinner bpmSpinner;
     @FXML private Button btnStopSong;
@@ -52,6 +56,11 @@ public class PrincipalController {
     @FXML private Pane playlistGridContent;
 
     private Stage rackStage;
+    private static final File SAMPLES_DIRECTORY = new File("src/main/resources/samples");
+    private static final Preferences LIBRARY_PREFERENCES =
+            Preferences.userNodeForPackage(PrincipalController.class);
+    private static final String PREF_LIBRARY_FOLDERS = "libraryFolders";
+    private final List<File> externalLibraryFolders = new ArrayList<>();
     private List<PlaylistItem> songData = new ArrayList<>();
     private Line playheadLine; // La línea visual del cursor
     private Timeline songTimeline; // El "reloj" maestro de la Playlist
@@ -70,7 +79,7 @@ public class PrincipalController {
     private double initialLayoutX;
     private double initialLayoutY;
     private boolean isResizing = false;
-    private final double RESIZE_MARGIN = 10.0; // Píxeles del borde derecho para redimensionar
+    private final double RESIZE_MARGIN = 10.0; 
     // Detección de click vs drag en la rejilla de la Playlist
     private double gridPressedX;
     private double gridPressedY;
@@ -83,11 +92,9 @@ public class PrincipalController {
     @FXML
     public void initialize() {
         GlobalState.setPrincipalController(this);
-        // Configurar el Spinner de BPM (30 a 300, inicial 120)
         SpinnerValueFactory<Double> bpmFactory =
                 new SpinnerValueFactory.DoubleSpinnerValueFactory(30.0, 300.0, 120.0, 1.0);
         bpmSpinner.setValueFactory(bpmFactory);
-        // Cuando el spinner cambie, actualizamos el GlobalState
         bpmSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
             GlobalState.setBpm((Double) newVal);
         });
@@ -121,7 +128,6 @@ public class PrincipalController {
         setupLibrary();
     }
 
-    // Abrir Sintetizador
     @FXML
     private void handleOpenSynth(ActionEvent event) {
         try {
@@ -150,7 +156,6 @@ public class PrincipalController {
         }
     }
 
-    // Abrir Channel Rack
     @FXML
     public void handleOpenChannelRack(ActionEvent actionEvent) {
         if (rackStage == null) {
@@ -228,7 +233,6 @@ public class PrincipalController {
         timelineHeader.getChildren().clear();
         trackHeadersContainer.getChildren().clear();
         playlistGridContent.getChildren().clear();
-        // Ajustar el tamaño total del lienzo de la rejilla
         double totalWidth = NUM_BARS * CELL_WIDTH;
         double totalHeight = NUM_TRACKS * TRACK_HEIGHT;
         playlistGridContent.setMinWidth(totalWidth);
@@ -239,26 +243,22 @@ public class PrincipalController {
             barLabel.setPrefWidth(CELL_WIDTH);
             barLabel.setMinWidth(CELL_WIDTH);
             barLabel.setAlignment(Pos.CENTER);
-            // Estilo: Texto gris y borde derecho suave
             barLabel.setStyle("-fx-text-fill: #888888; -fx-font-size: 10px; -fx-border-color: #333333; -fx-border-width: 0 1 0 0;");
             timelineHeader.getChildren().add(barLabel);
-            // Línea vertical en la rejilla (para cada compás)
             Line vLine = new Line(i * CELL_WIDTH, 0, i * CELL_WIDTH, totalHeight);
-            vLine.setStroke(Color.web("#2A2A2A")); // Color de la rejilla vertical
-            vLine.getStrokeDashArray().addAll(2d, 2d); // Opcional: línea punteada
+            vLine.setStroke(Color.web("#2A2A2A")); 
+            vLine.getStrokeDashArray().addAll(2d, 2d); 
             playlistGridContent.getChildren().add(vLine);
         }
 
         // --- 2. GENERAR TRACK HEADERS (Eje Y) ---
         for (int j = 0; j < NUM_TRACKS; j++) {
-            // Etiqueta del Track
             Label trackLabel = new Label("Track " + (j + 1));
             trackLabel.setPrefHeight(TRACK_HEIGHT);
             trackLabel.setMinHeight(TRACK_HEIGHT);
             trackLabel.setMaxWidth(Double.MAX_VALUE);
-            trackLabel.setPadding(new Insets(0, 0, 0, 10)); // Margen izquierdo
+            trackLabel.setPadding(new Insets(0, 0, 0, 10)); 
             trackLabel.setAlignment(Pos.CENTER_LEFT);
-            // Estilo alterno para facilitar la lectura
             String bg = (j % 2 == 0) ? "#262626" : "#232323";
             trackLabel.setStyle("-fx-text-fill: #aaaaaa; -fx-background-color: " + bg + "; -fx-border-color: #1A1A1A; -fx-border-width: 0 0 1 0;");
             // Menú contextual para el track
@@ -287,30 +287,27 @@ public class PrincipalController {
 
             trackMenu.getItems().add(renameItem);
             trackLabel.setContextMenu(trackMenu);
-            // Permitir renombrar también con DOBLE CLIC
             trackLabel.setOnMouseClicked(e -> {
                 if (e.getClickCount() == 2 && e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
                     renameItem.fire();
                 }
             });
             trackHeadersContainer.getChildren().add(trackLabel);
-            // Línea horizontal en la rejilla (separando pistas)
             Line hLine = new Line(0, (j + 1) * TRACK_HEIGHT, totalWidth, (j + 1) * TRACK_HEIGHT);
-            hLine.setStroke(Color.web("#1A1A1A")); // Color de separación de pistas
+            hLine.setStroke(Color.web("#1A1A1A")); 
 
             playlistGridContent.getChildren().add(hLine);
         }
         playheadLine = new Line(0, 0, 0, totalHeight);
-        playheadLine.setStroke(Color.RED); // Color clásico de playhead
+        playheadLine.setStroke(Color.RED); 
         playheadLine.setStrokeWidth(2);
         playheadLine.setOpacity(0.8);
-        playheadLine.setMouseTransparent(true); // Para que no interfiera con los clics en la rejilla
+        playheadLine.setMouseTransparent(true); 
 
         playlistGridContent.getChildren().add(playheadLine);
     }
 
     private void enablePatternPainting() {
-        // Distinguir click vs drag para evitar bloques duplicados
         playlistGridContent.setOnMousePressed(event -> {
             if (event.getButton() != javafx.scene.input.MouseButton.PRIMARY) return;
             gridPressedX = event.getX();
@@ -327,7 +324,6 @@ public class PrincipalController {
                 if (selectedPattern != null) {
                     int colIndex = (int) (gridPressedX / (CELL_WIDTH * 4));
                     int rowIndex = (int) (gridPressedY / TRACK_HEIGHT);
-                    // Debounce para evitar duplicados
                     long now = System.currentTimeMillis();
                     if (colIndex == lastBlockCol && rowIndex == lastBlockRow
                             && (now - lastBlockCreationTime) < 150) {
@@ -347,7 +343,6 @@ public class PrincipalController {
     }
 
     private void createClip(String patternName, double x, double y) {
-        // 1. LÓGICA DE CÁLCULO DE LONGITUD
         int durationBars = 1;
 
         if (GlobalState.getChannelRackController() != null) {
@@ -355,20 +350,13 @@ public class PrincipalController {
             if (row != null) {
                 int lastStep = row.getLastActiveStepIndex();
                 if (lastStep >= 0) {
-                    // Mantenemos el cálculo de cuántos compases ocupa (1-4)
                     durationBars = (lastStep / 16) + 1;
                 }
             }
         }
 
-        // --- EL AJUSTE DE ESCALA ---
-        // Si durationBars es 1, queremos que ocupe 4 celdas (CELL_WIDTH * 4)
-        // para que llegue hasta el número "1" (o cubra el espacio del compás 1)
         double initialWidth = durationBars * (CELL_WIDTH * 4);
 
-        // 2. Crear datos lógicos
-        // Nota: El startBar ahora debería calcularse dividiendo por (CELL_WIDTH * 4)
-        // si quieres que el "snap" sea por compases completos
         int colIndex = (int) (x / (CELL_WIDTH * 4));
         double snapX = colIndex * (CELL_WIDTH * 4);
 
@@ -377,32 +365,26 @@ public class PrincipalController {
         item.setDurationBars(durationBars);
         songData.add(item);
 
-        // 3. Crear contenedor visual
         javafx.scene.layout.StackPane clipContainer = new javafx.scene.layout.StackPane();
 
-        // Forzamos el ancho multiplicado por 4
         clipContainer.setMinWidth(initialWidth);
         clipContainer.setPrefWidth(initialWidth);
         clipContainer.setMaxWidth(initialWidth);
 
         clipContainer.setPrefHeight(TRACK_HEIGHT);
-        clipContainer.setLayoutX(snapX); // Usamos el snapX corregido
+        clipContainer.setLayoutX(snapX); 
         clipContainer.setLayoutY(y);
         clipContainer.setUserData(item);
 
-        // Estilo y label (igual que antes)
         clipContainer.setStyle("-fx-background-color: #4a4a4a; -fx-background-radius: 4; -fx-border-color: #666666; -fx-border-width: 1;");
         Label nameLabel = new Label(patternName);
         nameLabel.setStyle("-fx-text-fill: white; -fx-font-size: 10px; -fx-font-weight: bold;");
         clipContainer.getChildren().add(nameLabel);
 
-        // =============================================================
         // LÓGICA DE INTERACCIÓN (MOUSE EVENTS)
-        // =============================================================
 
         // --- 1. MOUSE MOVED (Cambiar cursor) ---
         clipContainer.setOnMouseMoved(e -> {
-            // Si estamos cerca del borde derecho, cambiamos cursor a redimensionar
             if (e.getX() > clipContainer.getWidth() - RESIZE_MARGIN) {
                 clipContainer.setCursor(javafx.scene.Cursor.H_RESIZE);
             } else {
@@ -412,14 +394,11 @@ public class PrincipalController {
         // --- 2. MOUSE PRESSED (Iniciar acción) ---
         clipContainer.setOnMousePressed(e -> {
             if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
-                // Guardamos posición inicial
                 mouseAnchorX = e.getSceneX();
                 mouseAnchorY = e.getSceneY();
                 initialLayoutX = clipContainer.getLayoutX();
                 initialLayoutY = clipContainer.getLayoutY();
-                // Detectar si vamos a redimensionar o a mover
                 isResizing = (e.getX() > clipContainer.getWidth() - RESIZE_MARGIN);
-                // Traer al frente para que no quede detrás de otros bloques al mover
                 clipContainer.toFront();
                 e.consume();
             }
@@ -429,10 +408,8 @@ public class PrincipalController {
             if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
                 if (isResizing) {
                     // MODO REDIMENSIONAR
-                    // Calculamos nuevo ancho basado en la posición del ratón dentro del nodo
                     double newWidth = e.getX();
                     clipContainer.setMaxWidth(newWidth);
-                    // Mínimo 1 celda de ancho
                     if (newWidth < CELL_WIDTH) newWidth = CELL_WIDTH;
                     clipContainer.setPrefWidth(newWidth);
                 } else {
@@ -449,70 +426,54 @@ public class PrincipalController {
         // --- 4. MOUSE RELEASED (Soltar y Ajustar a Rejilla - SNAP) ---
         clipContainer.setOnMouseReleased(e -> {
             if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
-                // Definimos cuánto mide un compás visualmente
                 double barWidth = CELL_WIDTH * 4;
 
                 if (isResizing) {
-                    // Ajustar ANCHO a la rejilla de BEATS en lugar de compases enteros
                     double currentWidth = clipContainer.getPrefWidth();
 
-                    // Calculamos cuántos "beats" (celdas individuales) ocupa
                     int numBeats = (int) Math.round(currentWidth / CELL_WIDTH);
-                    if (numBeats < 1) numBeats = 1; // Mínimo 1 beat de ancho
+                    if (numBeats < 1) numBeats = 1; 
 
-                    // Redimensionamos visualmente el clip
                     double snappedWidth = numBeats * CELL_WIDTH;
                     clipContainer.setPrefWidth(snappedWidth);
                     clipContainer.setMinWidth(snappedWidth);
                     clipContainer.setMaxWidth(snappedWidth);
 
-                    // ACTUALIZAR LÓGICA: Si 4 beats son 1 compás, la duración es numBeats / 4.0
                     item.setDurationBars(numBeats / 4.0);
 
                 } else {
-                    // Ajustar POSICIÓN a la rejilla de COMPASES
                     double rawX = clipContainer.getLayoutX();
                     double rawY = clipContainer.getLayoutY();
 
-                    // Snap X (Usamos un nombre diferente para evitar el error de "already defined")
                     int finalCol = (int) Math.round(rawX / barWidth);
                     if (finalCol < 0) finalCol = 0;
                     double snappedX = finalCol * barWidth;
 
-                    // Snap Y (Track)
                     int finalRow = (int) Math.round(rawY / TRACK_HEIGHT);
                     if (finalRow < 0) finalRow = 0;
                     if (finalRow >= NUM_TRACKS) finalRow = NUM_TRACKS - 1;
                     double snappedY = finalRow * TRACK_HEIGHT;
 
-                    // Aplicar posición ajustada
                     clipContainer.setLayoutX(snappedX);
                     clipContainer.setLayoutY(snappedY);
 
-                    // ACTUALIZAR DATOS LÓGICOS
                     item.setStartBar(finalCol + 1);
                     item.setTrackIndex(finalRow);
                 }
             }
         });
         // --- 5. CLICK DERECHO (Borrar) ---
-        // Usamos Filter para capturarlo antes que otros eventos si fuera necesario
         clipContainer.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_CLICKED, e -> {
             if (e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                // Borrar de la vista
                 playlistGridContent.getChildren().remove(clipContainer);
-                // Borrar de la memoria
                 songData.remove(item);
                 e.consume();
             }
         });
-        // Añadir al lienzo
         playlistGridContent.getChildren().add(clipContainer);
     }
 
     private void initializeSongTimeline() {
-        // Definimos la resolución: Queremos que el cursor se actualice suavemente.
-        // Una actualización cada 20ms (50 FPS) es suficiente.
         songTimeline = new Timeline(new KeyFrame(Duration.millis(20), e -> {
             updatePlayhead();
         }));
@@ -523,46 +484,34 @@ public class PrincipalController {
         double bpm = GlobalState.getBpm();
         double oldX = currentPlayheadX;
 
-        // 1. La velocidad sigue igual.
-        // Si CELL_WIDTH (40px) es 1 Beat, a 120 BPM recorrerá 80 píxeles por segundo.
-        // Por lo tanto, tardará exactamente 2 segundos en recorrer 1 compás (160px). ¡Perfecto!
         double pixelsPerTick = ((bpm / 60.0) * CELL_WIDTH) / 50.0;
 
         currentPlayheadX += pixelsPerTick;
 
-        // 2. DETECCIÓN DE COLISIÓN (Trigger)
         checkCollisions(oldX, currentPlayheadX);
 
-        // 3. Loop (Vuelta al principio)
-        // ¡CAMBIO AQUÍ! El final del lienzo ahora es 4 veces más largo.
         double totalWidth = NUM_BARS * (CELL_WIDTH * 4);
         if (currentPlayheadX >= totalWidth) {
             currentPlayheadX = 0;
             previousPlayheadX = 0;
         }
 
-        // 4. Actualizar visual
         playheadLine.setStartX(currentPlayheadX);
         playheadLine.setEndX(currentPlayheadX);
     }
 
     private void checkCollisions(double oldX, double newX) {
-        // Definimos visualmente cuánto mide el compás entero
         double barWidth = CELL_WIDTH * 4;
 
-        // Recorremos todos los bloques de la canción
         for (PlaylistItem item : songData) {
 
             double itemStartX = (item.getStartBar() - 1) * barWidth;
-            // Calculamos dónde termina exactamente este bloque usando la duración precisa
             double itemEndX = itemStartX + (item.getDurationBars() * barWidth);
 
-            // ¿El playhead acaba de ENTRAR en el bloque? -> PLAY
             if (itemStartX >= oldX && itemStartX < newX) {
                 triggerPattern(item);
             }
 
-            // ¿El playhead acaba de SALIR del bloque? -> STOP
             if (itemEndX >= oldX && itemEndX < newX) {
                 stopPattern(item);
             }
@@ -611,23 +560,22 @@ public class PrincipalController {
             return cell;
         });
     }
-    // Método para exportar a wav
+
     @FXML
     private void handleExportWav(ActionEvent event) {
-        // 1. Abrir diálogo para elegir dónde guardar
         javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
         fileChooser.setTitle("Export song");
         fileChooser.getExtensionFilters().add(
                 new javafx.stage.FileChooser.ExtensionFilter("Archivo WAV", "*.wav")
         );
-        // Nombre por defecto
+
         fileChooser.setInitialFileName("my_hydra_project.wav");
 
         File file = fileChooser.showSaveDialog(btnPlaySong.getScene().getWindow());
 
         if (file != null) {
             double bpm = GlobalState.getBpm();
-            ChannelRackController rack = GlobalState.getChannelRackController(); // Obtenemos el rack
+            ChannelRackController rack = GlobalState.getChannelRackController(); 
             new Thread(() -> {
                 try {
                     AudioExporter.exportSong(file, songData, bpm, rack);
@@ -657,7 +605,7 @@ public class PrincipalController {
     // Librería de samples
     private void setupLibrary() {
         // 1. Ruta Raíz
-        File rootDir = new File("src/main/resources/samples");
+        File rootDir = SAMPLES_DIRECTORY;
 
         // 2. Crear el nodo raíz del árbol (invisible si showRoot es false)
         TreeItem<File> rootItem = new TreeItem<>(rootDir);
@@ -666,13 +614,32 @@ public class PrincipalController {
         // 3. Llenar el árbol recursivamente
         populateTree(rootDir, rootItem);
 
-        // 4. Asignar al componente visual
-        libraryTreeView.setRoot(rootItem);
-        libraryTreeView.setShowRoot(false); // Ocultamos la carpeta madre para que se vean directo los contenidos
+        // 4. Añadir las carpetas externas que el usuario haya agregado
+        loadLibraryFolders();
+        for (File folder : externalLibraryFolders) {
+            rootItem.getChildren().add(createFolderNode(folder));
+        }
 
-        // 5. PERSONALIZAR CÓMO SE VE CADA FILA (CellFactory)
-        // Esto es vital: le decimos cómo dibujar un File (solo queremos el nombre)
+        // 5. Asignar al componente visual
+        libraryTreeView.setRoot(rootItem);
+        libraryTreeView.setShowRoot(false); 
+
+        // 6. PERSONALIZAR CÓMO SE VE CADA FILA (CellFactory)
         libraryTreeView.setCellFactory(tv -> new TreeCell<File>() {
+            private final ContextMenu contextMenu = new ContextMenu();
+            private final MenuItem refreshItem = new MenuItem("Refresh");
+            private final SeparatorMenuItem separatorItem = new SeparatorMenuItem();
+            private final MenuItem removeItem = new MenuItem("Remove from library");
+
+            {
+                refreshItem.setOnAction(event -> refreshLibraryFolder(getTreeItem()));
+
+                removeItem.setStyle("-fx-text-fill: #ff5555;");
+                removeItem.setOnAction(event -> removeLibraryFolder(getTreeItem()));
+
+                contextMenu.getItems().addAll(refreshItem, separatorItem, removeItem);
+            }
+
             @Override
             protected void updateItem(File item, boolean empty) {
                 super.updateItem(item, empty);
@@ -680,27 +647,41 @@ public class PrincipalController {
                 if (empty || item == null) {
                     setText(null);
                     setGraphic(null);
+                    setContextMenu(null);
                 } else {
-                    setText(item.getName()); // Mostramos solo el nombre (ej: "kick.wav")
-                    // Opcional: Añadir iconos simples si es carpeta o archivo
+                    setText(item.getName());
+                    // Añadir iconos simples si es carpeta o archivo
                     // setGraphic(new ImageView(...));
                     if (item.isDirectory()) {
                         setStyle("-fx-text-fill: #ffffff; -fx-font-weight: bold;"); // Carpetas en blanco negrita
+
+                        // Solo las carpetas externas se pueden quitar de la Library
+                        boolean canRemove = isManagedLibraryFolder(item);
+                        separatorItem.setVisible(canRemove);
+                        removeItem.setVisible(canRemove);
+                        setContextMenu(contextMenu);
                     } else {
                         setStyle("-fx-text-fill: #aaaaaa;"); // Archivos en gris
+                        setContextMenu(null);
                     }
                 }
             }
         });
-        // 6. Evento de Doble Clic
+        // 7. Evento de Doble Clic
         libraryTreeView.setOnMouseClicked(this::handleLibraryClick);
+    }
+
+    private TreeItem<File> createFolderNode(File folder) {
+        TreeItem<File> item = new TreeItem<>(folder);
+        populateTree(folder, item);
+        item.setExpanded(true);
+        return item;
     }
 
     private void populateTree(File dir, TreeItem<File> parentItem) {
         File[] files = dir.listFiles();
         if (files != null) {
             for (File file : files) {
-                // Filtramos: Solo carpetas o archivos WAV
                 boolean isWav = file.isFile() && file.getName().toLowerCase().endsWith(".wav");
                 boolean isDir = file.isDirectory();
 
@@ -708,7 +689,6 @@ public class PrincipalController {
                     TreeItem<File> item = new TreeItem<>(file);
                     parentItem.getChildren().add(item);
 
-                    // SI ES UNA CARPETA, LLAMARSE A SÍ MISMO (RECURSIÓN)
                     if (isDir) {
                         populateTree(file, item);
                     }
@@ -719,15 +699,150 @@ public class PrincipalController {
 
     private void handleLibraryClick(MouseEvent event) {
         if (event.getClickCount() == 2) {
-            // Obtenemos el item seleccionado
             TreeItem<File> selectedItem = (TreeItem<File>) libraryTreeView.getSelectionModel().getSelectedItem();
 
-            // Verificamos que sea un archivo de audio válido (no una carpeta)
             if (selectedItem != null && selectedItem.getValue().isFile()) {
                 File selectedFile = selectedItem.getValue();
                 loadSampleToRack(selectedFile);
             }
         }
+    }
+
+    @FXML
+    private void handleAddToLibrary(ActionEvent event) {
+        DirectoryChooser directoryChooser = new DirectoryChooser();
+        directoryChooser.setTitle("Add sample folder");
+        directoryChooser.setInitialDirectory(SAMPLES_DIRECTORY.isDirectory()
+                ? SAMPLES_DIRECTORY
+                : new File(System.getProperty("user.home")));
+
+        File selectedFolder = directoryChooser.showDialog(btnAddToLibrary.getScene().getWindow());
+        if (selectedFolder == null || !selectedFolder.isDirectory()) {
+            return;
+        }
+
+        File folder = selectedFolder.getAbsoluteFile();
+        if (isFolderInLibrary(folder)) {
+            showLibraryAlert(Alert.AlertType.INFORMATION, "Folder already in the library",
+                    "That folder is already shown in the Library.");
+            return;
+        }
+
+        externalLibraryFolders.add(folder);
+        saveLibraryFolders();
+
+        TreeItem<File> rootItem = (TreeItem<File>) libraryTreeView.getRoot();
+        if (rootItem == null) {
+            return;
+        }
+
+        TreeItem<File> folderNode = createFolderNode(folder);
+        rootItem.getChildren().add(folderNode);
+        libraryTreeView.getSelectionModel().select(folderNode);
+    }
+
+    private void refreshLibraryFolder(TreeItem<File> item) {
+        if (item == null || item.getValue() == null) {
+            return;
+        }
+
+        File folder = item.getValue();
+        if (!folder.isDirectory()) {
+            showLibraryAlert(Alert.AlertType.ERROR, "Folder not available",
+                    "The folder \"" + folder.getPath() + "\" no longer exists.");
+            return;
+        }
+
+        item.getChildren().clear();
+        populateTree(folder, item);
+        item.setExpanded(true);
+    }
+
+    private void removeLibraryFolder(TreeItem<File> item) {
+        if (item == null || item.getValue() == null) {
+            return;
+        }
+
+        File folder = item.getValue().getAbsoluteFile();
+        boolean removed = externalLibraryFolders.removeIf(
+                existing -> existing.getAbsoluteFile().equals(folder));
+        if (!removed) {
+            return;
+        }
+
+        saveLibraryFolders();
+
+        TreeItem<File> rootItem = item.getParent();
+        if (rootItem != null) {
+            rootItem.getChildren().remove(item);
+        }
+    }
+
+    private boolean isFolderInLibrary(File folder) {
+        Path samplesPath = SAMPLES_DIRECTORY.toPath().toAbsolutePath().normalize();
+        Path folderPath = folder.toPath().toAbsolutePath().normalize();
+        if (folderPath.startsWith(samplesPath)) {
+            return true;
+        }
+        return isManagedLibraryFolder(folder);
+    }
+
+    private boolean isManagedLibraryFolder(File folder) {
+        for (File existing : externalLibraryFolders) {
+            if (existing.getAbsoluteFile().equals(folder.getAbsoluteFile())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void loadLibraryFolders() {
+        externalLibraryFolders.clear();
+
+        String saved;
+        try {
+            saved = LIBRARY_PREFERENCES.get(PREF_LIBRARY_FOLDERS, "");
+        } catch (RuntimeException e) {
+            System.err.println("Could not read the library folders: " + e.getMessage());
+            return;
+        }
+
+        for (String path : saved.split("\n")) {
+            if (path.isBlank()) {
+                continue;
+            }
+
+            File folder = new File(path);
+            // Ignore folders that were moved or deleted since the last run
+            if (folder.isDirectory()) {
+                externalLibraryFolders.add(folder.getAbsoluteFile());
+            }
+        }
+    }
+
+    private void saveLibraryFolders() {
+        StringBuilder builder = new StringBuilder();
+        for (File folder : externalLibraryFolders) {
+            if (builder.length() > 0) {
+                builder.append('\n');
+            }
+            builder.append(folder.getAbsolutePath());
+        }
+
+        try {
+            LIBRARY_PREFERENCES.put(PREF_LIBRARY_FOLDERS, builder.toString());
+        } catch (RuntimeException e) {
+            System.err.println("Could not save the library folders: " + e.getMessage());
+        }
+    }
+
+    private void showLibraryAlert(Alert.AlertType type, String header, String content) {
+        Alert alert = new Alert(type);
+        alert.setTitle("Library");
+        alert.setHeaderText(header);
+        alert.setContentText(content);
+        alert.getDialogPane().setGraphic(null);
+        alert.showAndWait();
     }
 
     private void loadSampleToRack(File sampleFile) {
